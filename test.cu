@@ -6,6 +6,8 @@
 #include <random>
 #include <iomanip>
 
+#include <windows.h>
+
 float CompareBias(string path, string name, string path2, string name2) {
 #if !LINUX
     wchar_t szCmdLineW[500] = { 0 };
@@ -52,7 +54,7 @@ int main()
 {
     string GT_path = "./Results/GT/";
     string predict_path = "./Results/";
-    string test_path = "./TestCase/";
+    string test_path = "./scene/";
 
     int sample_num = 1024;
     VolumeRender::RenderType RunType = VolumeRender::RenderType::MRPNN;
@@ -63,10 +65,10 @@ int main()
 
     const int test_num = 4;
     string names[test_num] = { "CLOUD0", "CLOUD1",  "MODEL0", "MODEL1"};
-    float3 lightDirs[test_num][3] = { 
+    float3 lightDirs[test_num][3] = {
         {
-            normalize(float3{ 0.34281, 0.70711, 0.61845 }), 
-            normalize(float3{ 0.98528, 0.06976, 0.15605 }), 
+            normalize(float3{ 0.34281, 0.70711, 0.61845 }),
+            normalize(float3{ 0.98528, 0.06976, 0.15605 }),
             normalize(float3{ -0.90329, 0.34202, 0.55901}),
         },
         {
@@ -86,7 +88,7 @@ int main()
         }
     };
     float3 CamPoss[test_num] = {
-        float3{ 0.67085, -0.03808, -0.04856 }, float3{ 0.55471, 0.30303, 0.10048 }, 
+        float3{ 0.67085, -0.03808, -0.04856 }, float3{ 0.55471, 0.30303, 0.10048 },
         float3{ 0.8, 0, 0 }, float3{ -0.01786, 0.11180, 0.56642 }
     };
     float alphas[test_num] = { 1,2,2,4 };

@@ -5,6 +5,10 @@
 #undef GUI
 #endif
 
+#ifndef GUI
+#define GUI
+#endif
+
 #ifdef GUI
 
 #include "camera.hpp"
@@ -419,7 +423,7 @@ private:
         ImGui::SameLine();
         if (!predict)
         {
-            ImGui::Checkbox("Denoise", &denoise); 
+            ImGui::Checkbox("Denoise", &denoise);
         }
         else
         {
@@ -432,7 +436,7 @@ private:
         }
 
         ImGui::SliderFloat("Camera Exposure", &exposure, 0, 2);
-        
+
         ImGui::Checkbox("Inspector", &inspector);
         ImGui::SameLine(); ImGui::Spacing();
         ImGui::SameLine(); ImGui::Spacing();
@@ -652,14 +656,14 @@ int Main_Loop(GUIs& gui)
         GetWindowRect(DX_Window, &rect2);
 
         float3 aim = float3{ (float)rect.right + 10, (float)rect.top, 0 };
-        
+
         float l = distance(current_fpos, aim) - rest_l;
         float3 f;
         if (l == 0) f = float3{ 0,10,0 };
         else f = normalize(aim - current_fpos) * 10 * l + float3{ 0, 200, 0 };
         // static friction
         if (length(velocity) < 1) {
-            f = normalize(f) * max(0.0f, length(f) - 1600); 
+            f = normalize(f) * max(0.0f, length(f) - 1600);
             velocity = float3 { 0 };
         }
         else {
@@ -828,18 +832,18 @@ void SaveFB(GLFWwindow* window, char* fileName)
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
 
-    line_width = width * 3; // �õ�ÿһ�е��������ݳ��� 
+    line_width = width * 3; // �õ�ÿһ�е��������ݳ���
     line_width = (line_width + 3) / 4 * 4;
 
     PixelDataLength = line_width * height;
 
-    // �����ڴ�ʹ��ļ� 
+    // �����ڴ�ʹ��ļ�
     pPixelData = (GLubyte*)malloc(PixelDataLength);
     if (pPixelData == 0)
         exit(0);
 
 
-    // ��ȡ���� 
+    // ��ȡ����
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
     //glReadPixels(0, 0, img_w, img_h, GL_BGR_EXT, GL_UNSIGNED_BYTE, pPixelData);
@@ -961,7 +965,7 @@ void RunGUI(Camera& cam, VolumeRender& volume, float3 lightDir = normalize({ 1,1
 
         // Reallocate buffers if window size changed.
         int nwidth, nheight;
-        glfwGetFramebufferSize(window, &nwidth, &nheight); 
+        glfwGetFramebufferSize(window, &nwidth, &nheight);
         if (gui.fsr) {
             nwidth /= 2; nheight /= 2;
         }
@@ -973,7 +977,7 @@ void RunGUI(Camera& cam, VolumeRender& volume, float3 lightDir = normalize({ 1,1
             resize_buffers(
                 &accum_buffer, &histo_buffer_cuda, &display_buffer_cuda, tempBuffer, &tempTex, width, gui.fsr ? width * 2 : width, display_buffer);
             //kernel_params.accum_buffer = accum_buffer;
-            
+
             if (gui.fsr)
                 glViewport(0, 0, width * 2, height * 2);
             else
@@ -1021,8 +1025,8 @@ void RunGUI(Camera& cam, VolumeRender& volume, float3 lightDir = normalize({ 1,1
 
             auto start_time = std::chrono::system_clock::now();
 
-            cam.Render(accum_buffer, histo_buffer_cuda, reinterpret_cast<unsigned int*>(p), int2{ width , height }, gui.frame, l, gui.lightColor, gui.alpha, gui.ms, gui.G, gui.toneType, 
-                gui.predict ? 
+            cam.Render(accum_buffer, histo_buffer_cuda, reinterpret_cast<unsigned int*>(p), int2{ width , height }, gui.frame, l, gui.lightColor, gui.alpha, gui.ms, gui.G, gui.toneType,
+                gui.predict ?
                     (gui.mrpnn ? VolumeRender::RenderType::MRPNN : VolumeRender::RenderType::RPNN)
                 :
                     VolumeRender::RenderType::PT

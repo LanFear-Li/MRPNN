@@ -5,29 +5,42 @@ project(MRPNN LANGUAGES CXX CUDA)
 enable_language(CUDA)
 
 IF (WIN32)
-
-MESSAGE(STATUS "Is windows")
-SET(CMAKE_CXX_FLAGS "/openmp /Ot")
-
+    MESSAGE(STATUS "Is windows")
+    SET(CMAKE_CXX_FLAGS "/openmp /Ot")
 ELSE ()
-
-MESSAGE(STATUS "Is linux")
-add_definitions(-DLINUX)
-
+    MESSAGE(STATUS "Is linux")
+    add_definitions(-DLINUX)
 ENDIF ()
 
-Option(GUI OFF)
-Option(RTX30XX OFF)
+Option(GUI ON)
+Option(RTX30XX ON)
 Option(TENSORCORE OFF)
 Option(CompileRPNN OFF)
 Option(DISABLE_FAST_MATH OFF)
 
 if (GUI)
     add_definitions(-DGUI)
-    find_package(GLEW)
-    find_package(glfw3)
+
+    set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
+
+    list(APPEND CMAKE_PREFIX_PATH "D:/Environments/glew-2.2.0")
+    list(APPEND CMAKE_PREFIX_PATH "D:/Environments/glfw3")
+
+    set(GLEW_LIBRARY "D:/Environments/glew-2.2.0/lib/Release/x64/glew32.lib")
+    set(GLFW3_LIBRARY "D:/Environments/glfw3/lib-vc2022/glfw3.lib")
+
+    find_package(GLEW REQUIRED)
+    message(STATUS "Found GLEW at ${GLEW_INCLUDE_DIR} and ${GLEW_LIBRARY}")
+    find_package(GLFW3 REQUIRED)
+    message(STATUS "Found GLFW3 in ${GLFW3_INCLUDE_DIR} and ${GLFW3_LIBRARY}")
+
+    INCLUDE_DIRECTORIES(${GLEW_INCLUDE_DIR})
+    INCLUDE_DIRECTORIES(${GLFW3_INCLUDE_DIR})
+
     add_subdirectory(Imgui)
 	INCLUDE_DIRECTORIES(Imgui_INCLUDE_DIR)
+else()
+    message("GUI is disabled")
 endif()
 
 if (CompileRPNN)
@@ -42,13 +55,13 @@ endif()
 file(GLOB CORE_HEADERS core/*.h *core/*.hpp core/*.cuh)
 file(GLOB CORE_SOURCES core/*.cpp core/*.cu)
 
-source_group("Core Include" FILES ${CORE_HEADERS}) 
+source_group("Core Include" FILES ${CORE_HEADERS})
 source_group("Core Source" FILES ${CORE_SOURCES})
 
 include_directories(${PROJECT_SOURCE_DIR}/core)
-  
+
 add_executable(DataGen ${CORE_HEADERS} ${CORE_SOURCES} dataGen.cu)
-set_target_properties(DataGen PROPERTIES 
+set_target_properties(DataGen PROPERTIES
 CUDA_SEPARABLE_COMPILATION ON
 CXX_STANDARD_REQUIRED ON
 CXX_STANDARD 17)
@@ -92,10 +105,10 @@ else()
 endif()
 
 if (GUI)
-    target_link_libraries(VolumeRender GLEW::GLEW glfw Imgui) 
+    target_link_libraries(VolumeRender GLEW::GLEW opengl32 ${GLFW3_LIBRARY} Imgui)
     add_dependencies(VolumeRender Imgui)
-    target_link_libraries(Test GLEW::GLEW glfw Imgui) 
+    target_link_libraries(Test GLEW::GLEW opengl32 ${GLFW3_LIBRARY} Imgui)
     add_dependencies(Test Imgui)
-    target_link_libraries(DataGen GLEW::GLEW glfw Imgui) 
+    target_link_libraries(DataGen GLEW::GLEW opengl32 ${GLFW3_LIBRARY} Imgui)
     add_dependencies(DataGen Imgui)
 endif()

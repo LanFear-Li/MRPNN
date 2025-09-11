@@ -130,8 +130,8 @@ __device__ bool DeterminateNextVertex(curandState* seed, float alpha, float g, f
             }
         }
     }
-    
-    *nextDir = SampleHenyeyGreenstein(Rand(seed), Rand(seed), dir, g);    
+
+    *nextDir = SampleHenyeyGreenstein(Rand(seed), Rand(seed), dir, g);
     *nextPos = (dir * t) + pos;
 
     return true;
@@ -198,7 +198,7 @@ __device__ float4 CalculateRadiance(float3 ori, float3 dir, float3 lightDir, flo
             float max_dis = RayBoxDistance(samplePosition, rayDirection);
 
             bool in_volume = DeterminateNextVertex(&seed, alpha, g , samplePosition, rayDirection, max_dis, &nextPos, &nextDir);
-            
+
             if (!in_volume)
             {
                 res = res + SkyBox(rayDirection) * current_scatter_rate;
@@ -213,10 +213,10 @@ __device__ float4 CalculateRadiance(float3 ori, float3 dir, float3 lightDir, flo
             current_scatter_rate = current_scatter_rate * scatter_rate;
 
             max_dis = RayBoxDistance(samplePosition, lightDir);
-            
+
             float light_phase = HenyeyGreenstein(dot(rayDirection, lightDir), g);
             res = res + lightColor * current_scatter_rate * (Tr(&seed, samplePosition, lightDir, max_dis, alpha) * light_phase);
-            
+
             rayDirection = nextDir;
         }
     }
@@ -341,7 +341,7 @@ __device__ float3 Normal(float3 pos)
     float3 n;
     int max_loop = 10;
     do {
-        n = {   
+        n = {
             max(0.f, -Density(pos + float3{ delta,0,0 })) - max(0.f, -Density(pos - float3{ delta,0,0 })),
             max(0.f, -Density(pos + float3{ 0,delta,0 })) - max(0.f, -Density(pos - float3{ 0,delta,0 })),
             max(0.f, -Density(pos + float3{ 0,0,delta })) - max(0.f, -Density(pos - float3{ 0,0,delta }))
@@ -492,7 +492,7 @@ __device__ float4 NNPredict(float3 ori, float3 dir, float3 lightDir, float3 ligh
         SampleBasis basis = { GetMatrixFromNormal(&seed, dir), GetMatrixFromNormal(&seed, lightDir) };
 
         float offset = RayBoxOffset(ori, dir);
-        if (offset < 0) 
+        if (offset < 0)
             unfinish = false;
 
         ori = ori + dir * offset;
