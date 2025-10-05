@@ -6,9 +6,11 @@
 #include <random>
 #include <iomanip>
 
+#define VOLUME_TEST 1
+
 int main()
 {
-#if 1
+#if VOLUME_TEST
     string cloud_path = "./scene/CLOUD0";
     VolumeRender v(cloud_path);
     float3 lightColor = { 1.0, 1.0, 1.0 };

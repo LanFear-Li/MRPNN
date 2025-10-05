@@ -35,7 +35,7 @@ __global__ void CalculateRadianceMulti(volatile int* record, float3* result, flo
 
 __global__ void GetSampleMulti(volatile int* record, int task_num, float3* result, float* alpha, float3* ori, float3* dir, float3* lightDir, float* g, float* scatters, float3 lightColor = { 1, 1, 1 }, int multiScatter = 1, int sampleNum = 1) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    
+
     if (idx >= task_num) return;
 
     float3 res = GetSample(ori[idx], dir[idx], lightDir[idx], lightColor, scatters[idx], alpha[idx], multiScatter, g[idx], sampleNum);
@@ -54,6 +54,15 @@ __device__ float exposure = 1;
 __device__ float3 lori;
 __device__ float3 lup;
 __device__ float3 lright;
+
+__device__ float dev_fovY = 60.0f;
+__device__ float dev_fovY_last = 60.0f;
+
+#define CUDART_PI_F 3.141592654f
+__device__ __forceinline__ float to_radians(float x) {
+    return x * (CUDART_PI_F / 180.0f);
+}
+
 template<bool predict, int type = Type::MRPNN>
 __global__ void RenderCamera(float3* target, Histogram* histo_buffer, int2 size, float3 ori, float3 up, float3 right, float3 lightDir, float3 lightColor, float alpha, int multiScatter, float g) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -70,8 +79,13 @@ __global__ void RenderCamera(float3* target, Histogram* histo_buffer, int2 size,
     float v = (i + Rand(&seed)) / size.y;
 
     float3 forward = normalize(-ori);
-    float3 dir = forward + (right * (u * 2 - 1)) + (up * (v * 2 - 1));
-    dir = normalize(dir);
+
+    float fov = dev_fovY;
+    float aspect = (float)size.x / (float)size.y;
+    float tHalf  = tanf(0.5f * to_radians(fov));
+    float px     = (u * 2.0f - 1.0f) * aspect * tHalf;
+    float py     = (v * 2.0f - 1.0f) * tHalf;
+    float3 dir = normalize(forward + right * px + up * py);
 
     float4 res_dis;
     if (predict)
@@ -126,15 +140,43 @@ __global__ void RenderCamera(float3* target, Histogram* histo_buffer, int2 size,
 
         int lidx;
         {   // reprojection
+            // float3 motion_pos = ori + dir * dis;
+            // float3 ldir = motion_pos - lori;
+            // float3 lforward = normalize(lori);
+            // ldir = ldir / dot(ldir, lforward);
+            // ldir = ldir - lforward;
+            // float lu = dot(ldir, lright) * 0.5 + 0.5;
+            // float lv = dot(ldir, lup) * -0.5 + 0.5;
+            // int2 lxy = int2{ min(size.x - 1, max(0, int(lu * size.x))), min(size.y - 1, max(0, int(lv * size.y))) };
+            // lidx = lxy.y * size.x + lxy.x;
+        }
+        {
             float3 motion_pos = ori + dir * dis;
-            float3 ldir = motion_pos - lori;
-            float3 lforward = normalize(lori);
-            ldir = ldir / dot(ldir, lforward);
-            ldir = ldir - lforward;
-            float lu = dot(ldir, lright) * 0.5 + 0.5;
-            float lv = dot(ldir, lup) * -0.5 + 0.5;
-            int2 lxy = int2{ min(size.x - 1, max(0, int(lu * size.x))), min(size.y - 1, max(0, int(lv * size.y))) };
-            lidx = lxy.y * size.x + lxy.x;
+            float3 ldir      = motion_pos - lori;
+            float3 lforward  = normalize(lori);
+
+            float z = dot(ldir, lforward);
+            if (z <= 1e-6f) {
+                lidx = idx;
+            } else {
+                ldir = ldir / z;
+                ldir = ldir - lforward;
+
+                float aspectLast = (float)size.x / (float)size.y;
+                float tHalfLast = tanf(0.5f * to_radians(dev_fovY_last));
+
+                float ndc_x = (dot(ldir, lright)) / (aspectLast * tHalfLast);
+                float ndc_y = (dot(ldir, lup))    / (tHalfLast);
+
+                float lu = ndc_x * 0.5f + 0.5f;
+                float lv = ndc_y * -0.5f + 0.5f;
+
+                int2 lxy = int2{
+                    min(size.x - 1, max(0, int(lu * size.x))),
+                    min(size.y - 1, max(0, int(lv * size.y)))
+                };
+                lidx = lxy.y * size.x + lxy.x;
+            }
         }
 
         float lerp_rate = 1.0f / (1 + fNum);
@@ -301,7 +343,7 @@ __global__ void CalculateShadowTerm_TR(float3* result, float3 ori, float3 dir, f
     result[blockIdx.x * blockDim.x + threadIdx.x] = res;
 }
 
-float3 VolumeRender::GetTr(float3 ori, float3 dir, float3 lightDir, float alpha,float g, int sampleNum) const 
+float3 VolumeRender::GetTr(float3 ori, float3 dir, float3 lightDir, float alpha,float g, int sampleNum) const
 {
     int group = 32;
     int group_num = sampleNum / group + (sampleNum % group != 0 ? 1 : 0);
@@ -351,9 +393,9 @@ vector<float3> VolumeRender::GetRadiances(vector<float3> ori, vector<float3> dir
     CheckError;
 
     cudaMemcpy(dirs, dir.data(), sizeof(float3) * task_num, cudaMemcpyHostToDevice);
-    
+
     CheckError;
-    
+
     volatile int* d_rec, *h_rec;
     cudaSetDeviceFlags(cudaDeviceMapHost);
     cudaHostAlloc((void**)&h_rec, sizeof(int), cudaHostAllocMapped);
@@ -363,9 +405,9 @@ vector<float3> VolumeRender::GetRadiances(vector<float3> ori, vector<float3> dir
         CalculateRadianceMulti<0><<<group_num, group>>>(d_rec, results, oris, dirs, lightDir, lightColor, alpha, multiScatter, g, sampleNum);
     else if (rt == RenderType::RPNN)
         CalculateRadianceMulti<1><<<group_num, group>>>(d_rec, results, oris, dirs, lightDir, lightColor, alpha, multiScatter, g, sampleNum);
-    else        
+    else
         CalculateRadianceMulti<2><<<group_num, group>>>(d_rec, results, oris, dirs, lightDir, lightColor, alpha, multiScatter, g, sampleNum);
-    
+
     auto call_back = thread([&](){
         int value = 0;
         do {
@@ -377,7 +419,7 @@ vector<float3> VolumeRender::GetRadiances(vector<float3> ori, vector<float3> dir
             wait(1000);
         } while (value < group_num);
     });
-    
+
     cudaDeviceSynchronize();
 
     call_back.join();
@@ -444,12 +486,12 @@ vector<float3> VolumeRender::Render(int2 size, float3 ori, float3 up, float3 rig
 
         dimGrid.x = (size.x + dimBlock.x - 1) / dimBlock.x;
         dimGrid.y = (size.y + dimBlock.y - 1) / dimBlock.y;
-         
+
         if (rt == RenderType::PT)
             RenderCamera<false><<<dimGrid, dimBlock>>>(results, size, ori, up, right, lightDir, lightColor, alpha, multiScatter, g);
         else if (rt == RenderType::RPNN)
             RenderCamera<true, Type::RPNN><<<dimGrid, dimBlock>>>(results, size, ori, up, right, lightDir, lightColor, alpha, multiScatter, g);
-        else 
+        else
             RenderCamera<true, Type::MRPNN><<<dimGrid, dimBlock>>>(results, size, ori, up, right, lightDir, lightColor, alpha, multiScatter, g);
 
         cudaDeviceSynchronize();
@@ -491,10 +533,10 @@ void VolumeRender::Render(float3* target, Histogram* histo_buffer, unsigned int*
     }
 
     cudaMemcpyToSymbol(frameNum, &randseed, sizeof(int), 0, cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(randNum, &rand_cpu, sizeof(int), 0, cudaMemcpyHostToDevice);    
+    cudaMemcpyToSymbol(randNum, &rand_cpu, sizeof(int), 0, cudaMemcpyHostToDevice);
     cudaMemcpyToSymbol(flip, &flip_cpu, sizeof(int), 0, cudaMemcpyHostToDevice);
 
-    flip_cpu = (flip_cpu + 1) % 2;    
+    flip_cpu = (flip_cpu + 1) % 2;
     rand_cpu++;
 
     dim3 dimBlock(8, 4);
@@ -816,7 +858,7 @@ VolumeRender::VolumeRender(string path) {
         int i = 0;
         float inv = 64.0 / 255.0;
         while (!infile.eof()) {
-            getline(infile, line); 
+            getline(infile, line);
             string firstc = line.substr(0, 1);
             if (firstc != std::string("w") && firstc != std::string("h") && firstc != std::string("d")) {
                 if (i >= 256 * 256 * 256) break;
@@ -1247,10 +1289,10 @@ __global__ void Fill_TR(int res, float alpha, float3 lightDir) {
         shadowdist = shadowdist + lsample;
     }
     float shadowterm = exp(-shadowdist * alpha * MaxStepInv) * phase;
-    
+
     surf3Dwrite(TR_MUL * shadowterm, surfRef, z * sizeof(float), y, x);
 }
-void VolumeRender::Update_TR(float3 lightDir,float alpha, bool CPU) 
+void VolumeRender::Update_TR(float3 lightDir,float alpha, bool CPU)
 {
 
     if (lightDir.x == tr_lightDir.x && lightDir.y == tr_lightDir.y && lightDir.z == tr_lightDir.z && alpha == tr_alpha)
@@ -1301,7 +1343,7 @@ void VolumeRender::Update_TR(float3 lightDir,float alpha, bool CPU)
         {
             res = 128 >> tr_mip;
             float alphaScale = pow(1.73f, tr_mip + 1.0f);
-             
+
             texRef.normalized = true;
             texRef.filterMode = cudaFilterModeLinear;
             texRef.addressMode[0] = cudaAddressModeBorder;
@@ -1339,7 +1381,7 @@ void VolumeRender::SetHDRI(string path) {
         cudaFreeArray(env_tex_dev);
     if (hdri_img.data != 0)
         delete hdri_img.data;
-    
+
     hdri_img.data = reinterpret_cast<float4*>(pixels);
     hdri_img.sx = rx;
     hdri_img.sy = ry;
