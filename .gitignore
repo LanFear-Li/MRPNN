@@ -1,4 +1,5 @@
 .vscode
+vscode_build
 scene/
 imgui.ini
 
